@@ -12,6 +12,11 @@ RShiftUsed := false
 SpaceHeld := false
 SpaceUsed := false
 
+; Space held + CapsLock tapped emits this key (see HandleCapsLock).
+; Bind it in Flow Launcher. F13-F24 are real Windows keys that
+; virtually no application uses, so nothing will ever conflict.
+LauncherKey := "F13"
+
 SetupTray()
 
 ToggleDvorak(*) {
@@ -45,7 +50,7 @@ SetupTray() {
 ;==============================================================
 ; Special keys
 ;==============================================================
-*CapsLock::HandleCapsLock()   ; hold = Ctrl, tap = Esc
+*CapsLock::HandleCapsLock()   ; hold = Ctrl, tap = Esc; Space held + tap = launcher key
 *LShift::HandleLShift()       ; hold = Shift, tap = (
 *RShift::HandleRShift()       ; hold = Shift, tap = [
 *Space::HandleSpace()         ; hold = Alt,   tap = space
@@ -135,12 +140,22 @@ SetupTray() {
 ; Handlers
 ;==============================================================
 HandleCapsLock() {
+	global SpaceHeld, LauncherKey
 	Send("{Blind}{LCtrl DownR}")
 	KeyWait("CapsLock")
 	tapped := (A_PriorKey = "CapsLock")
 	Send("{Blind}{LCtrl Up}")
-	if tapped
+	if !tapped
+		return
+	if SpaceHeld {
+		; Space is holding Alt: release it so the launcher key arrives
+		; unmodified (otherwise Flow's hotkey capture ends on "LeftAlt").
+		; This ends the Alt hold; re-press Space for Alt again.
+		Send("{Blind}{LAlt Up}")
+		Send("{Blind}{" . LauncherKey . "}")
+	} else {
 		Send("{Blind}{Esc}")
+	}
 }
 
 HandleLShift() {
@@ -211,7 +226,11 @@ ToggleTerminal() {
 		; Standard install location; falls back to PATH.
 		exe := EnvGet("ProgramFiles") . "\WezTerm\wezterm-gui.exe"
 		if FileExist(exe)
-			Run('"' . exe . '"')
+			; This script runs elevated (scheduled task), and child processes
+			; inherit admin rights. Launch via Explorer so WezTerm ends up
+			; unelevated -- otherwise Flow Launcher (non-admin) can't react
+			; to its hotkey while WezTerm has focus.
+			Run('explorer.exe "' . exe . '"')
 		else
 			Run("wezterm-gui.exe")
 	}
