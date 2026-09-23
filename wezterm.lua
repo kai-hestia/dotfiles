@@ -10,8 +10,10 @@ local config = wezterm.config_builder()
 config.font = wezterm.font 'JetBrainsMono Nerd Font Mono'
 config.font_size = 12.0
 
--- Shell: WSL (Ubuntu) starting in the Linux home dir; fish is the login shell there.
-config.default_prog = { 'wsl.exe', '~' }
+-- Shell: WSL (Ubuntu), login fish in the home dir, then run the `r` fish
+-- function (tmux attach -d) before the first prompt so a new WezTerm window
+-- opens inside tmux. (`wsl ~` can't take -e, hence --cd ~.)
+config.default_prog = { 'wsl.exe', '--cd', '~', '-e', 'fish', '-l', '-C', 'r' }
 
 -- IME: let the system (Rime/Weasel) render the preedit. This is what makes the
 -- IME candidate popup follow the terminal cursor on Windows.
@@ -50,6 +52,31 @@ config.keys = {
   { key = 'Enter', mods = 'ALT', action = act.SendString '\n' },
   { key = 'Enter', mods = 'SHIFT', action = act.SendString '\n' },
 }
+
+-- tmux is the only multiplexer, so strip WezTerm's tab bindings (spawn/switch/
+-- move) from the default keys. CloseCurrentTab is kept (with the tab bar gone
+-- it just closes the window), as are all non-tab defaults.
+local function action_name(action)
+  if type(action) == 'string' then
+    return action
+  elseif type(action) == 'table' then
+    for name in pairs(action) do
+      return name
+    end
+  end
+  return ''
+end
+
+for _, binding in ipairs(wezterm.gui.default_keys()) do
+  local name = action_name(binding.action):lower()
+  if name:find('tab') and not name:find('close') then
+    table.insert(config.keys, {
+      key = binding.key,
+      mods = binding.mods,
+      action = act.DisableDefaultAssignment,
+    })
+  end
+end
 
 -- Start fullscreen, hiding the taskbar (Alacritty: startup_mode = "Fullscreen").
 wezterm.on('gui-startup', function(cmd)
